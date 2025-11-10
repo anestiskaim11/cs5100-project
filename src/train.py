@@ -179,9 +179,9 @@ if __name__ == "__main__":
                 # Feature matching
                 real1, rf1 = D1(torch.cat([f, m, y_onehot], dim=1))
                 real2, rf2 = D2(torch.cat([
-                    F.interpolate(f, 0.5, mode='bilinear', align_corners=False),
-                    F.interpolate(m, 0.5, mode='bilinear', align_corners=False),
-                    F.interpolate(y_onehot, 0.5, mode='bilinear', align_corners=False)
+                    F.interpolate(f, scale_factor=0.5, mode='bilinear', align_corners=False),
+                    F.interpolate(m, scale_factor=0.5, mode='bilinear', align_corners=False),
+                    F.interpolate(y_onehot, scale_factor=0.5, mode='bilinear', align_corners=False)
                 ], dim=1))
                 loss_fm = feature_matching_loss(rf1, ff1) + feature_matching_loss(rf2, ff2)
 
