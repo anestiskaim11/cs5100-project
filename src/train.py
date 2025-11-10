@@ -6,7 +6,6 @@ from gan import GeneratorUNet, PatchDiscriminator
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from loss import EMA, masked_l1, d_hinge, g_hinge, dft_log_amp, soft_erode, dice_loss, cldice_loss
 import torchvision.utils as vutils
-import torch_directml
 from pytorch_msssim import ms_ssim
 import numpy as np, os, time, cv2, random, torch
 from dataloader import get_cityscapes_dataloader

@@ -1,4 +1,5 @@
 import torch, torch.nn as nn, torch.nn.functional as F, timm
+from config import NUM_CLASSES
 
 def safe_create_convnext(pretrained=True):
     try:
@@ -33,7 +34,7 @@ class UpBlock(nn.Module):
         return self.conv(x)
 
 class GeneratorUNet(nn.Module):
-    def __init__(self, in_ch=4):  # fundus(3) + mask(1)
+    def __init__(self, in_ch=4, num_classes=NUM_CLASSES): 
         super().__init__()
         self.backbone = safe_create_convnext(pretrained=True)
         chs = self.backbone.feature_info.channels()
@@ -46,9 +47,9 @@ class GeneratorUNet(nn.Module):
         self.up0 = UpBlock(96, 96, 64)
 
         self.head_int = nn.Sequential(nn.Conv2d(64, 32, 3, 1, 1), nn.LeakyReLU(0.2, True),
-                                      nn.Conv2d(32, 1, 1), nn.Tanh())
+                                      nn.Conv2d(32, num_classes, 1), nn.Tanh())
         self.head_prob= nn.Sequential(nn.Conv2d(64, 32, 3, 1, 1), nn.LeakyReLU(0.2, True),
-                                      nn.Conv2d(32, 1, 1))
+                                      nn.Conv2d(32, num_classes, 1))
 
     def forward(self, f, m):
         # Shallow conditioning branch
