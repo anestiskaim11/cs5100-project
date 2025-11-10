@@ -83,8 +83,8 @@ if __name__ == "__main__":
     device = torch.device(device_str)
     
 
-    G  = GeneratorUNet(in_ch=4).to(device)
-    D1 = PatchDiscriminator(in_ch=3+1+NUM_CLASSES).to(device)  # [fundus(3)+mask(1)+octa(1)]
+    G = GeneratorUNet(in_ch=4, num_classes=NUM_CLASSES).to(device)
+    D1 = PatchDiscriminator(in_ch=3+1+NUM_CLASSES).to(device)  
     D2 = PatchDiscriminator(in_ch=3+1+NUM_CLASSES).to(device)
     DY = PatchDiscriminator(in_ch=NUM_CLASSES).to(device)      # Y-only
 
@@ -116,63 +116,60 @@ if __name__ == "__main__":
 
         pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS}", leave=True)
         for i, batch in enumerate(pbar):
-            f = batch["image"].to(device, non_blocking=True).float()
-            y = batch["label"].to(device, non_blocking=True).float()
-            m = batch["m"].to(device, non_blocking=True).float()
+            f = batch["image"].to(device, non_blocking=True).float()   # [B,3,H,W]
+            y = batch["label"].to(device, non_blocking=True).long()    # [B,1,H,W] or [B,H,W]
+            m = batch["m"].to(device, non_blocking=True).float()       # [B,1,H,W]
 
+            # ---- One-hot encode labels ----
+            if y.ndim == 4:
+                y = y.squeeze(1)  # [B,H,W]
+            y_onehot = F.one_hot(y, num_classes=NUM_CLASSES)            # [B,H,W,NUM_CLASSES]
+            y_onehot = y_onehot.permute(0,3,1,2).float()               # [B,NUM_CLASSES,H,W]
 
             # ----- D step -----
             with torch.amp.autocast(device_str):
-                y_hat, p_hat, _ = G(f, m)
+                y_hat, p_hat, _ = G(f, m)  # y_hat: [B,NUM_CLASSES,H,W]
 
                 # D1 full-res
-                real1, rf1 = D1(torch.cat([f, m, y], dim=1))
+                real1, rf1 = D1(torch.cat([f, m, y_onehot], dim=1))
                 fake1, ff1 = D1(torch.cat([f, m, y_hat.detach()], dim=1))
                 loss_d1 = d_hinge(real1, fake1)
 
                 # D2 half-res
-                f2  = F.interpolate(f, scale_factor=(0.5,0.5), mode='bilinear', align_corners=False)
-                m2  = F.interpolate(m, scale_factor=(0.5,0.5), mode='bilinear', align_corners=False)
-                y2  = F.interpolate(y, scale_factor=(0.5,0.5), mode='bilinear', align_corners=False)
-                yh2 = F.interpolate(y_hat.detach(), scale_factor=(0.5,0.5), mode='bilinear', align_corners=False)
+                f2  = F.interpolate(f, scale_factor=0.5, mode='bilinear', align_corners=False)
+                m2  = F.interpolate(m, scale_factor=0.5, mode='bilinear', align_corners=False)
+                y2  = F.interpolate(y_onehot, scale_factor=0.5, mode='bilinear', align_corners=False)
+                yh2 = F.interpolate(y_hat.detach(), scale_factor=0.5, mode='bilinear', align_corners=False)
                 real2, rf2 = D2(torch.cat([f2, m2, y2], dim=1))
                 fake2, ff2 = D2(torch.cat([f2, m2, yh2], dim=1))
                 loss_d2 = d_hinge(real2, fake2)
 
-                # DY y-only (optionally with unpaired real OCT-A)
-                realy = y
-                '''
-                if len(OCTA3MM_IMAGES)>0 and (i % 2 == 0):
-                    path = random.choice(OCTA3MM_IMAGES)
-                    im = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-                    if im is not None:
-                        im = cv2.resize(im, (IMG_SIZE, IMG_SIZE), interpolation=cv2.INTER_AREA).astype('float32')/255.0
-                        realy = torch.from_numpy(im)[None,None].to(device)*2-1
-                        realy = realy.repeat(y.shape[0],1,1,1)
-                '''
-                fakey = y_hat.detach()
-                realY_logits, _ = DY(realy)
-                fakeY_logits, _ = DY(fakey)
+                # DY y-only
+                realY_logits, _ = DY(y_onehot)
+                fakeY_logits, _ = DY(y_hat.detach())
                 loss_dy = d_hinge(realY_logits, fakeY_logits) * LAMBDA_GAN_Y
 
                 loss_d = loss_d1 + loss_d2 + loss_dy
 
-            optD1.zero_grad(set_to_none=True); optD2.zero_grad(set_to_none=True); optDY.zero_grad(set_to_none=True)
+            optD1.zero_grad(set_to_none=True)
+            optD2.zero_grad(set_to_none=True)
+            optDY.zero_grad(set_to_none=True)
             scaler.scale(loss_d).backward()
-            scaler.step(optD1); scaler.step(optD2); scaler.step(optDY)
+            scaler.step(optD1)
+            scaler.step(optD2)
+            scaler.step(optDY)
 
             # ----- G step -----
             with torch.amp.autocast(device_str):
                 y_hat, p_hat, plogits = G(f, m)
 
+                # GAN losses
                 fake1, ff1 = D1(torch.cat([f, m, y_hat], dim=1))
                 fake2, ff2 = D2(torch.cat([
-                    F.interpolate(f,  scale_factor=(0.5,0.5), mode='bilinear', align_corners=False),
-                    F.interpolate(m,  scale_factor=(0.5,0.5), mode='bilinear', align_corners=False),
-                    F.interpolate(y_hat,scale_factor=(0.5,0.5), mode='bilinear', align_corners=False)
+                    F.interpolate(f, 0.5, mode='bilinear', align_corners=False),
+                    F.interpolate(m, 0.5, mode='bilinear', align_corners=False),
+                    F.interpolate(y_hat, 0.5, mode='bilinear', align_corners=False)
                 ], dim=1))
-
-                # GAN terms
                 loss_g_gan = g_hinge(fake1) + g_hinge(fake2)
 
                 # Y-only GAN
@@ -180,34 +177,32 @@ if __name__ == "__main__":
                 loss_g_y = g_hinge(fakeY_logits) * LAMBDA_GAN_Y
 
                 # Feature matching
-                real1, rf1 = D1(torch.cat([f, m, y], dim=1))
+                real1, rf1 = D1(torch.cat([f, m, y_onehot], dim=1))
                 real2, rf2 = D2(torch.cat([
-                    F.interpolate(f,  scale_factor=(0.5,0.5), mode='bilinear', align_corners=False),
-                    F.interpolate(m,  scale_factor=(0.5,0.5), mode='bilinear', align_corners=False),
-                    F.interpolate(y,  scale_factor=(0.5,0.5), mode='bilinear', align_corners=False)
+                    F.interpolate(f, 0.5, mode='bilinear', align_corners=False),
+                    F.interpolate(m, 0.5, mode='bilinear', align_corners=False),
+                    F.interpolate(y_onehot, 0.5, mode='bilinear', align_corners=False)
                 ], dim=1))
                 loss_fm = feature_matching_loss(rf1, ff1) + feature_matching_loss(rf2, ff2)
 
-                # Reconstruction L1 on FOV
-                l1 = masked_l1(y_hat, y, m)
+                # Reconstruction / masked L1
+                l1 = masked_l1(y_hat, y_onehot, m)
 
-                # Central frequency loss (mask out ~10% border)
-                h,w = y.shape[-2:]
+                # Central frequency loss
+                h,w = y_onehot.shape[-2:]
                 cy0, cy1 = int(0.1*h), int(0.9*h)
                 cx0, cx1 = int(0.1*w), int(0.9*w)
-                cm = torch.zeros_like(m); cm[:,:,cy0:cy1,cx0:cx1] = m[:,:,cy0:cy1,cx0:cx1]
-                l_freq = F.l1_loss(dft_log_amp(y_hat*cm), dft_log_amp(y*cm))
+                cm = torch.zeros_like(m)
+                cm[:,:,cy0:cy1,cx0:cx1] = m[:,:,cy0:cy1,cx0:cx1]
+                l_freq = F.l1_loss(dft_log_amp(y_hat*cm), dft_log_amp(y_onehot*cm))
 
                 # Rim loss
                 er = soft_erode(m)
                 rim = (m - er).clamp(0,1)
-                l_rim = masked_l1(y_hat, y, rim)
+                l_rim = masked_l1(y_hat, y_onehot, rim)
 
-                
-
-                loss_g = (LAMBDA_GAN * loss_g_gan) + \
-                        (LAMBDA_L1 * l1) + \
-                         + loss_g_y
+                # Total G loss
+                loss_g = (LAMBDA_GAN * loss_g_gan) + (LAMBDA_L1 * l1) + loss_g_y
 
             optG.zero_grad(set_to_none=True)
             scaler.scale(loss_g).backward()
@@ -219,6 +214,7 @@ if __name__ == "__main__":
                 "Loss_D": f"{loss_d.item():.4f}",
                 "Loss_G": f"{loss_g.item():.4f}"
             })
+
 
         schedG.step()
         schedD1.step()

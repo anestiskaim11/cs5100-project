@@ -26,12 +26,13 @@ class ConvBlock(nn.Module):
 class UpBlock(nn.Module):
     def __init__(self, in_ch, skip_ch, out_ch):
         super().__init__()
-        self.conv = ConvBlock(in_ch, out_ch)
+        self.conv = ConvBlock(in_ch + skip_ch, out_ch)  # concat channels
+
     def forward(self, x, skip):
-        # Interpolate x to match the spatial size of skip
         x = F.interpolate(x, size=skip.shape[-2:], mode='bilinear', align_corners=False)
-        #x = torch.cat([x, skip], dim=1)
+        x = torch.cat([x, skip], dim=1)  # concat skip connection
         return self.conv(x)
+
 
 class GeneratorUNet(nn.Module):
     def __init__(self, in_ch=4, num_classes=NUM_CLASSES): 
@@ -67,9 +68,9 @@ class GeneratorUNet(nn.Module):
         x = self.up1(x, s0)
         x = self.up0(x, x0)  # fuse shallow conditioned path at last stage
 
-        y = self.head_int(x)             # [-1,1] synthetic OCT-A intensity
-        plogits = self.head_prob(x)      # vessel logits
-        p = torch.sigmoid(plogits)       # [0,1] vessel prob
+        y = self.head_int(x)             
+        plogits = self.head_prob(x)      
+        p = torch.sigmoid(plogits)       
         return y, p, plogits
 
 class PatchDiscriminator(nn.Module):
