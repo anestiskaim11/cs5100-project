@@ -166,9 +166,9 @@ if __name__ == "__main__":
                 # GAN losses
                 fake1, ff1 = D1(torch.cat([f, m, y_hat], dim=1))
                 fake2, ff2 = D2(torch.cat([
-                    F.interpolate(f, 0.5, mode='bilinear', align_corners=False),
-                    F.interpolate(m, 0.5, mode='bilinear', align_corners=False),
-                    F.interpolate(y_hat, 0.5, mode='bilinear', align_corners=False)
+                    F.interpolate(f, scale_factor=0.5, mode='bilinear', align_corners=False),
+                    F.interpolate(m, scale_factor=0.5, mode='bilinear', align_corners=False),
+                    F.interpolate(y_hat, scale_factor=0.5, mode='bilinear', align_corners=False)
                 ], dim=1))
                 loss_g_gan = g_hinge(fake1) + g_hinge(fake2)
 
