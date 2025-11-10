@@ -35,20 +35,27 @@ def evaluate(val_loader):
     return {"l1": float(np.mean(l1_list))}
 
 def save_samples(batch, y_hat, p_hat, tag, max_n=4):
-    f = batch["image"][:max_n].to(device)
-    y = batch["label"][:max_n].to(device)
-    #p = batch["prob"][:max_n].to(device)
-    yh = y_hat[:max_n]; ph = p_hat[:max_n]
+    f = batch["image"][:max_n].to(device)  # [B,3,H,W]
+    y = batch["label"][:max_n].to(device)  # [B,H,W] or [B,1,H,W]
 
-    # Convert 1-channel tensors to 3 channels by repeating
-    y_3ch = y.repeat(1, 3, 1, 1)
-    yh_3ch = yh.repeat(1, 3, 1, 1)
-    #p_3ch = p.repeat(1, 3, 1, 1)
-    ph_3ch = ph.repeat(1, 3, 1, 1)
+    # --- Convert y_hat and p_hat from one-hot/logits to class indices for visualization ---
+    y_hat_cls = y_hat.argmax(dim=1, keepdim=True)  # [B,1,H,W]
+    p_hat_cls = p_hat.argmax(dim=1, keepdim=True)  # [B,1,H,W]
 
-    f_norm = (f - f.min())/(f.max()-f.min()+1e-6)
-    panel = torch.cat([f_norm, (y_3ch+1)/2, (yh_3ch+1)/2, ph_3ch], dim=0)
+    # --- Repeat to 3 channels for visualization ---
+    y_3ch = y.repeat(1,3,1,1) if y.ndim==4 else y.unsqueeze(1).repeat(1,3,1,1)
+    yh_3ch = y_hat_cls.repeat(1,3,1,1)
+    ph_3ch = p_hat_cls.repeat(1,3,1,1)
+
+    # --- Normalize input images ---
+    f_norm = (f - f.min()) / (f.max() - f.min() + 1e-6)
+
+    # --- Concatenate panels: input | GT | predicted | predicted-class ---
+    panel = torch.cat([f_norm, y_3ch.float()/NUM_CLASSES, yh_3ch.float()/NUM_CLASSES, ph_3ch.float()/NUM_CLASSES], dim=0)
+
+    # --- Save ---
     vutils.save_image(panel, f"{RUN_DIR}/samples/{tag}.png", nrow=max_n, normalize=False)
+
 
 if __name__ == "__main__":
 
