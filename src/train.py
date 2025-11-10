@@ -28,11 +28,11 @@ def evaluate(val_loader):
         m = batch["m"].to(device)
         y_hat, p_hat, _ = G(f, m)
         yh_01 = (y_hat+1)/2; y_01 = (y+1)/2
-        ms = ms_ssim(yh_01, y_01, data_range=1.0, size_average=True)
+        #ms = ms_ssim(yh_01, y_01, data_range=1.0, size_average=True)
         l1 = masked_l1(y_hat, y, m)
-        ms_list.append(ms.item()); l1_list.append(l1.item())
+        #ms_list.append(ms.item()); l1_list.append(l1.item())
     ema.restore(G); G.train()
-    return {"ms_ssim": float(np.mean(ms_list)), "l1": float(np.mean(l1_list))}
+    return {"l1": float(np.mean(l1_list))}
 
 def save_samples(batch, y_hat, p_hat, tag, max_n=4):
     f = batch["image"][:max_n].to(device)
@@ -225,10 +225,10 @@ if __name__ == "__main__":
         # validation & checkpointing
         if (epoch % VAL_EVERY)==0:
             metrics = evaluate(val_loader)
-            comp = metrics["ms_ssim"] - 0.5*metrics["l1"]
+            comp = 0.5*metrics["l1"]
             dur = (time.time()-t0)/60
             #print(f"Epoch {epoch} done in {dur:.2f} min")
-            print(f"[val] MS-SSIM={metrics['ms_ssim']:.4f}  L1={metrics['l1']:.4f}  Composite={comp:.4f}")
+            print(f"[val] L1={metrics['l1']:.4f}  Composite={comp:.4f}")
             
 
             # save samples using a validation batch

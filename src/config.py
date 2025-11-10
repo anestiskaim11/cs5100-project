@@ -20,6 +20,6 @@ LAMBDA_FREQ = 1.0
 LAMBDA_RIM  = 0.2
 LAMBDA_GAN_Y= 0.5  # Y-only discriminator
 
-EPOCHS = 300
+EPOCHS = 100
 VAL_EVERY = 1
 LR = 2e-5
