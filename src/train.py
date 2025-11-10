@@ -84,9 +84,9 @@ if __name__ == "__main__":
     
 
     G  = GeneratorUNet(in_ch=4).to(device)
-    D1 = PatchDiscriminator(in_ch=3+1+1).to(device)  # [fundus(3)+mask(1)+octa(1)]
-    D2 = PatchDiscriminator(in_ch=3+1+1).to(device)
-    DY = PatchDiscriminator(in_ch=1).to(device)      # Y-only
+    D1 = PatchDiscriminator(in_ch=3+1+NUM_CLASSES).to(device)  # [fundus(3)+mask(1)+octa(1)]
+    D2 = PatchDiscriminator(in_ch=3+1+NUM_CLASSES).to(device)
+    DY = PatchDiscriminator(in_ch=NUM_CLASSES).to(device)      # Y-only
 
     optG = Adam(G.parameters(),  lr=LR, weight_decay=1e-5, betas=(0.5, 0.999))
     optD1= Adam(D1.parameters(), lr=LR, weight_decay=1e-5, betas=(0.5, 0.999))

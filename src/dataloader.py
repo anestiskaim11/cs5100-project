@@ -125,8 +125,8 @@ def get_cityscapes_pairs(root_left, root_label, split='train'):
 
 # --- DATALOADER FACTORY --- #
 def get_cityscapes_dataloader(mode='train'):
-    root_left = 'leftImg8bit_trainvaltest\\leftImg8bit'
-    root_label = 'gtFine_trainvaltest\\gtFine'
+    root_left = 'cs5100-project/leftImg8bit'
+    root_label = 'cs5100-project/gtFine'
 
     paired = get_cityscapes_pairs(root_left, root_label, split=mode)
 
