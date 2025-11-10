@@ -83,8 +83,6 @@ if __name__ == "__main__":
     device_str = "cuda" if torch.cuda.is_available() else "hip" if torch.version.hip else "cpu"
     device = torch.device(device_str)
     
-    
-    device = torch_directml.device()
 
     G  = GeneratorUNet(in_ch=4).to(device)
     D1 = PatchDiscriminator(in_ch=3+1+1).to(device)  # [fundus(3)+mask(1)+octa(1)]
