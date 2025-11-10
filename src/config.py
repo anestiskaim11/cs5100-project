@@ -1,0 +1,23 @@
+
+RUN_DIR = "run"
+
+
+IMG_SIZE = 256
+BATCH_SIZE = 4
+NUM_WORKERS = 2
+
+
+EPS = 1e-6
+SEED = 42
+LAMBDA_L1   = 10.0
+LAMBDA_FM   = 50.0
+LAMBDA_GAN  = 2.0
+LAMBDA_DICE = 1.0
+LAMBDA_CLD  = 0.5
+LAMBDA_FREQ = 1.0
+LAMBDA_RIM  = 0.2
+LAMBDA_GAN_Y= 0.5  # Y-only discriminator
+
+EPOCHS = 300
+VAL_EVERY = 1
+LR = 2e-5
