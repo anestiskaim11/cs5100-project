@@ -7,12 +7,6 @@ EPS = 1e-6
 def masked_l1(a,b,w):
     return ((a-b).abs()*w).sum()/(w.sum()+EPS)
 
-def dice_loss(pred, target, w):
-    pred = pred*w; target = target*w
-    num = 2*(pred*target).sum((1,2,3))
-    den = pred.sum((1,2,3)) + target.sum((1,2,3)) + EPS
-    return (1 - num/den).mean()
-
 def maxpool(x, k=3): return F.max_pool2d(x, k, 1, k//2)
 def soft_erode(x): p1=-maxpool(-x,3); p2=-maxpool(-x,5); return torch.min(p1,p2)
 def soft_dilate(x): return maxpool(x,3)
@@ -60,6 +54,21 @@ def focal_loss(inputs, targets, alpha=0.25, gamma=2.0, eps=1e-6):
     loss = (focal_weight * ce_loss).sum(dim=1).mean()
     return loss
 
+def dice_loss(inputs, targets, eps=1e-6):
+    """
+    Dice Loss for multi-class segmentation.
+    inputs: [B, C, H, W] (logits)
+    targets: [B, H, W] (integer class indices)
+    """
+    num_classes = inputs.shape[1]
+    targets_onehot = F.one_hot(targets, num_classes).permute(0,3,1,2).float()
+    probs = F.softmax(inputs, dim=1)
+    
+    intersection = torch.sum(probs * targets_onehot, dim=(0,2,3))
+    union = torch.sum(probs + targets_onehot, dim=(0,2,3))
+    dice = (2. * intersection + eps) / (union + eps)
+    dice_loss_val = 1 - dice.mean()
+    return dice_loss_val
 
 class EMA:
     def __init__(self, model, decay=0.999):
