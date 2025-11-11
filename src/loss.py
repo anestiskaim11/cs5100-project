@@ -41,6 +41,26 @@ def d_hinge(real_logits, fake_logits):
 def g_hinge(fake_logits):
     return -fake_logits.mean()
 
+
+def focal_loss(inputs, targets, alpha=0.25, gamma=2.0, eps=1e-6):
+    """
+    Focal Loss for multi-class segmentation.
+    inputs: [B, C, H, W] (logits)
+    targets: [B, H, W] (integer class indices)
+    """
+    num_classes = inputs.shape[1]
+    # Convert targets to one-hot
+    targets_onehot = F.one_hot(targets, num_classes).permute(0,3,1,2).float()
+    
+    # Compute softmax over classes
+    probs = F.softmax(inputs, dim=1).clamp(min=eps, max=1.0 - eps)
+    
+    ce_loss = -targets_onehot * torch.log(probs)
+    focal_weight = alpha * (1 - probs) ** gamma
+    loss = (focal_weight * ce_loss).sum(dim=1).mean()
+    return loss
+
+
 class EMA:
     def __init__(self, model, decay=0.999):
         self.decay = decay

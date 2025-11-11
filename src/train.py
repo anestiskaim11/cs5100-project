@@ -4,7 +4,7 @@ from torch.optim import Adam
 from tqdm import tqdm
 from gan import GeneratorUNet, PatchDiscriminator
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from loss import EMA, masked_l1, d_hinge, g_hinge, dft_log_amp, soft_erode, dice_loss, cldice_loss
+from loss import EMA, masked_l1, d_hinge, g_hinge, dft_log_amp, soft_erode, dice_loss, cldice_loss, focal_loss
 import torchvision.utils as vutils
 from pytorch_msssim import ms_ssim
 import numpy as np, os, time, cv2, random, torch
@@ -58,7 +58,7 @@ def evaluate(val_loader):
         if y.ndim == 4: y = y.squeeze(1)
 
         # L1 loss
-        y_onehot = F.one_hot(y, num_classes=NUM_CLASSES).permute(0,3,1,2).float()
+        #y_onehot = F.one_hot(y, num_classes=NUM_CLASSES).permute(0,3,1,2).float()
         #l1 = masked_l1(y_hat, y_onehot, m)
         #l1_list.append(l1.item())
 
@@ -229,7 +229,11 @@ if __name__ == "__main__":
                 loss_fm = feature_matching_loss(rf1, ff1) + feature_matching_loss(rf2, ff2)
 
                 # Reconstruction / masked L1
-                l1 = masked_l1(y_hat, y_onehot, m)
+                # Focal + Dice losses
+                y_labels = y_onehot.argmax(dim=1)  # convert one-hot back to class indices for loss
+                loss_focal = focal_loss(y_hat, y_labels)
+                loss_dice  = dice_loss(y_hat, y_labels)
+
 
                 # Central frequency loss
                 h,w = y_onehot.shape[-2:]
@@ -245,7 +249,9 @@ if __name__ == "__main__":
                 l_rim = masked_l1(y_hat, y_onehot, rim)
 
                 # Total G loss
-                loss_g = (LAMBDA_GAN * loss_g_gan) + (LAMBDA_L1 * l1) + loss_g_y
+                loss_g = (LAMBDA_GAN * loss_g_gan) + loss_g_y + \
+                (LAMBDA_FOCAL * loss_focal) + (LAMBDA_DICE * loss_dice)
+
 
             optG.zero_grad(set_to_none=True)
             scaler.scale(loss_g).backward()
