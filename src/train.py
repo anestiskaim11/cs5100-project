@@ -12,27 +12,62 @@ from dataloader import get_cityscapes_dataloader
 from config import *
 import argparse
 import config
+import csv
 
 random.seed(SEED); np.random.seed(SEED); torch.manual_seed(SEED); torch.cuda.manual_seed_all(SEED)
 
 def feature_matching_loss(real_feats, fake_feats):
     return sum(F.l1_loss(a,b) for a,b in zip(real_feats, fake_feats))
 
+def calculate_miou(preds, labels, num_classes):
+    """
+    Compute mean Intersection over Union (mIoU) for multi-class segmentation.
+    preds: [B,H,W] predicted class indices
+    labels: [B,H,W] ground truth class indices
+    """
+    preds = preds.cpu().numpy()
+    labels = labels.cpu().numpy()
+    ious = []
+
+    for cls in range(num_classes):
+        pred_inds = (preds == cls)
+        label_inds = (labels == cls)
+        intersection = np.logical_and(pred_inds, label_inds).sum()
+        union = np.logical_or(pred_inds, label_inds).sum()
+        if union == 0:
+            continue
+        ious.append(intersection / union)
+
+    if len(ious) == 0:
+        return 0.0
+    return np.mean(ious)
+
+
 @torch.no_grad()
 def evaluate(val_loader):
     G.eval(); ema.apply(G)
-    ms_list, l1_list = [], []
+    l1_list, miou_list = [], []
+
     for batch in val_loader:
         f = batch["image"].to(device)
         y = batch["label"].to(device)
         m = batch["m"].to(device)
-        y_hat, p_hat, _ = G(f, m)
-        yh_01 = (y_hat+1)/2; y_01 = (y+1)/2
-        #ms = ms_ssim(yh_01, y_01, data_range=1.0, size_average=True)
-        l1 = masked_l1(y_hat, y, m)
-        #ms_list.append(ms.item()); l1_list.append(l1.item())
+
+        y_hat, p_hat, _ = G(f, m)  # y_hat: [B, NUM_CLASSES, H, W]
+        y_hat_cls = y_hat.argmax(dim=1)  # predicted class indices [B,H,W]
+        if y.ndim == 4: y = y.squeeze(1)
+
+        # L1 loss
+        y_onehot = F.one_hot(y, num_classes=NUM_CLASSES).permute(0,3,1,2).float()
+        #l1 = masked_l1(y_hat, y_onehot, m)
+        #l1_list.append(l1.item())
+
+        # mIoU
+        miou = calculate_miou(y_hat_cls, y, NUM_CLASSES)
+        miou_list.append(miou)
+
     ema.restore(G); G.train()
-    return {"l1": float(np.mean(l1_list))}
+    return {"mIoU": float(np.mean(miou_list))}
 
 def save_samples(batch, y_hat, p_hat, tag, max_n=4):
     f = batch["image"][:max_n].to(device)  # [B,3,H,W]
@@ -116,7 +151,8 @@ if __name__ == "__main__":
     _, train_loader = get_cityscapes_dataloader(mode='train')
     _, val_loader = get_cityscapes_dataloader(mode='val')
 
-
+    train_G_losses = []
+    train_D_losses = []
     for epoch in range(start_epoch, EPOCHS):
         t0 = time.time()
         G.train(); D1.train(); D2.train(); DY.train()
@@ -217,6 +253,8 @@ if __name__ == "__main__":
             scaler.update()
             ema.update(G)
 
+            train_G_losses.append(loss_g.item())
+            train_D_losses.append(loss_d.item())
             pbar.set_postfix({
                 "Loss_D": f"{loss_d.item():.4f}",
                 "Loss_G": f"{loss_g.item():.4f}"
@@ -232,10 +270,10 @@ if __name__ == "__main__":
         # validation & checkpointing
         if (epoch % VAL_EVERY)==0:
             metrics = evaluate(val_loader)
-            comp = 0.5*metrics["l1"]
+            comp = metrics["mIoU"]
             dur = (time.time()-t0)/60
             #print(f"Epoch {epoch} done in {dur:.2f} min")
-            print(f"[val] L1={metrics['l1']:.4f}  Composite={comp:.4f}")
+            print(f"[val] mIoU={metrics['mIoU']:.4f}")
             
 
             # save samples using a validation batch
@@ -271,3 +309,17 @@ if __name__ == "__main__":
                     "metrics": metrics,
                 }, f"{RUN_DIR}/checkpoints/best.pt")
                 #print(f"[BEST] New best composite={best_score:.4f}")
+
+            csv_path = f"{RUN_DIR}/report/training_log.csv"
+            file_exists = os.path.isfile(csv_path)
+
+            with open(csv_path, mode='a', newline='') as f:
+                writer = csv.writer(f)
+                if not file_exists:
+                    writer.writerow(["epoch", "val_mIoU", "train_G_loss", "train_D_loss"])
+                writer.writerow([
+                    epoch,
+                    metrics["mIoU"],
+                    np.mean(train_G_losses),
+                    np.mean(train_D_losses)
+                ])
