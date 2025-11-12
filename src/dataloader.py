@@ -145,7 +145,7 @@ def get_cityscapes_dataloader(mode='train'):
         paired_images_dict=paired,
         image_transform=img_transform,
         label_transform=lbl_transform,
-        augment=(mode == 'train')
+        augment=False
     )
 
     dataloader = DataLoader(

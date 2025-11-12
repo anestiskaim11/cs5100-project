@@ -229,34 +229,12 @@ if __name__ == "__main__":
                 fakeY_logits, _ = DY(y_hat)
                 loss_g_y = g_hinge(fakeY_logits) * LAMBDA_GAN_Y
 
-                # Feature matching
-                real1, rf1 = D1(torch.cat([f, m, y_onehot], dim=1))
-                real2, rf2 = D2(torch.cat([
-                    F.interpolate(f, scale_factor=0.5, mode='bilinear', align_corners=False),
-                    F.interpolate(m, scale_factor=0.5, mode='bilinear', align_corners=False),
-                    F.interpolate(y_onehot, scale_factor=0.5, mode='bilinear', align_corners=False)
-                ], dim=1))
-                loss_fm = feature_matching_loss(rf1, ff1) + feature_matching_loss(rf2, ff2)
-
-                # Reconstruction / masked L1
+                
                 # Focal + Dice losses
                 y_labels = y_onehot.argmax(dim=1)  # convert one-hot back to class indices for loss
                 loss_focal = focal_loss(y_hat, y_labels)
                 loss_dice  = dice_loss(y_hat, y_labels)
 
-
-                # Central frequency loss
-                h,w = y_onehot.shape[-2:]
-                cy0, cy1 = int(0.1*h), int(0.9*h)
-                cx0, cx1 = int(0.1*w), int(0.9*w)
-                cm = torch.zeros_like(m)
-                cm[:,:,cy0:cy1,cx0:cx1] = m[:,:,cy0:cy1,cx0:cx1]
-                l_freq = F.l1_loss(dft_log_amp(y_hat*cm), dft_log_amp(y_onehot*cm))
-
-                # Rim loss
-                er = soft_erode(m)
-                rim = (m - er).clamp(0,1)
-                l_rim = masked_l1(y_hat, y_onehot, rim)
 
                 # Total G loss
                 loss_g = (LAMBDA_GAN * loss_g_gan) + loss_g_y + \
