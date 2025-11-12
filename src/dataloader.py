@@ -132,10 +132,10 @@ def get_cityscapes_dataloader(mode='train'):
 
     if (mode=='train'):
         random.seed(42)
-        paired = random.sample(paired, 500)
+        paired = dict(random.sample(list(paired.items()), 500))
     else:
         random.seed(42)
-        paired = random.sample(paired, 50)
+        paired = dict(random.sample(list(paired.items()), 50))
     img_transform = transforms.Compose([
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
         transforms.ToTensor(),
