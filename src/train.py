@@ -198,6 +198,16 @@ if __name__ == "__main__":
             optD2.zero_grad(set_to_none=True)
             optDY.zero_grad(set_to_none=True)
             scaler.scale(loss_d).backward()
+
+            scaler.unscale_(optD1)
+            scaler.unscale_(optD2)
+            scaler.unscale_(optDY)
+
+            torch.nn.utils.clip_grad_norm_(D1.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(D2.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(DY.parameters(), max_norm=1.0)
+
+
             scaler.step(optD1)
             scaler.step(optD2)
             scaler.step(optDY)
@@ -255,6 +265,10 @@ if __name__ == "__main__":
 
             optG.zero_grad(set_to_none=True)
             scaler.scale(loss_g).backward()
+
+            scaler.unscale_(optG)
+            torch.nn.utils.clip_grad_norm_(G.parameters(), max_norm=1.0)
+
             scaler.step(optG)
             scaler.update()
             ema.update(G)
