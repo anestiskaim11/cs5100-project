@@ -130,6 +130,12 @@ def get_cityscapes_dataloader(mode='train'):
 
     paired = get_cityscapes_pairs(root_left, root_label, split=mode)
 
+    if (mode=='train'):
+        random.seed(42)
+        paired = random.sample(paired, 500)
+    else:
+        random.seed(42)
+        paired = random.sample(paired, 50)
     img_transform = transforms.Compose([
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
         transforms.ToTensor(),
@@ -145,7 +151,7 @@ def get_cityscapes_dataloader(mode='train'):
         paired_images_dict=paired,
         image_transform=img_transform,
         label_transform=lbl_transform,
-        augment=False
+        augment=(mode == 'train')
     )
 
     dataloader = DataLoader(

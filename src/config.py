@@ -9,7 +9,7 @@ NUM_WORKERS = 8
 NUM_CLASSES = 34
 
 
-EPS = 1e-6
+EPS = 2e-4
 SEED = 42
 
 LAMBDA_GAN  = 2.0
