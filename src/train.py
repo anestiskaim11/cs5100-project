@@ -231,14 +231,16 @@ if __name__ == "__main__":
 
                 
                 # Focal + Dice losses
-                y_labels = y_onehot.argmax(dim=1)  # convert one-hot back to class indices for loss
-                loss_focal = focal_loss(y_hat, y_labels)
-                loss_dice  = dice_loss(y_hat, y_labels)
+                y_labels = y.squeeze(1) if y.ndim==4 else y
+                ce_loss = F.cross_entropy(y_hat, y_labels)
+
+                # Dice loss
+                loss_dice = dice_loss(y_hat, y_labels)
 
 
                 # Total G loss
                 loss_g = (LAMBDA_GAN * loss_g_gan) + loss_g_y + \
-                (LAMBDA_FOCAL * loss_focal) + (LAMBDA_DICE * loss_dice)
+                (LAMBDA_FOCAL * ce_loss) + (LAMBDA_DICE * loss_dice)
 
 
             optG.zero_grad(set_to_none=True)
