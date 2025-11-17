@@ -32,6 +32,9 @@ def dft_log_amp(x):
 
 def d_hinge(real_logits, fake_logits):
     return F.relu(1.0 - real_logits).mean() + F.relu(1.0 + fake_logits).mean()
+def d_hinge_smooth(real_logits, fake_logits, smooth=0.1):
+    """Discriminator hinge loss with label smoothing"""
+    return F.relu(1.0 - smooth - real_logits).mean() + F.relu(1.0 + fake_logits).mean()
 def g_hinge(fake_logits):
     return -fake_logits.mean()
 

@@ -3,8 +3,8 @@ import torch.nn.functional as F
 from torch.optim import Adam
 from tqdm import tqdm
 from gan import GeneratorUNet, PatchDiscriminator
-from torch.optim.lr_scheduler import CosineAnnealingLR
-from loss import EMA, masked_l1, d_hinge, g_hinge, dft_log_amp, soft_erode, dice_loss, cldice_loss, focal_loss
+from torch.optim.lr_scheduler import CosineAnnealingLR, ReduceLROnPlateau
+from loss import EMA, masked_l1, d_hinge, d_hinge_smooth, g_hinge, dft_log_amp, soft_erode, dice_loss, cldice_loss, focal_loss
 import torchvision.utils as vutils
 from pytorch_msssim import ms_ssim
 import numpy as np, os, time, cv2, random, torch
@@ -131,11 +131,11 @@ if __name__ == "__main__":
     DY = PatchDiscriminator(in_ch=NUM_CLASSES).to(device)      # Y-only
 
     optG = Adam(G.parameters(),  lr=LR, weight_decay=1e-5, betas=(0.5, 0.999))
-    optD1= Adam(D1.parameters(), lr=LR*0.01, weight_decay=1e-5, betas=(0.5, 0.999))
-    optD2= Adam(D2.parameters(), lr=LR*0.01, weight_decay=1e-5, betas=(0.5, 0.999))
-    optDY= Adam(DY.parameters(), lr=LR*0.01, weight_decay=1e-5, betas=(0.5, 0.999))
+    optD1= Adam(D1.parameters(), lr=LR*0.001, weight_decay=1e-5, betas=(0.5, 0.999))
+    optD2= Adam(D2.parameters(), lr=LR*0.001, weight_decay=1e-5, betas=(0.5, 0.999))
+    optDY= Adam(DY.parameters(), lr=LR*0.001, weight_decay=1e-5, betas=(0.5, 0.999))
 
-    schedG  = CosineAnnealingLR(optG,  T_max=EPOCHS, eta_min=1e-6)
+    schedG  = ReduceLROnPlateau(optG, mode='max', factor=0.5, patience=5, verbose=True, min_lr=1e-6)
     schedD1 = CosineAnnealingLR(optD1, T_max=EPOCHS, eta_min=1e-6)
     schedD2 = CosineAnnealingLR(optD2, T_max=EPOCHS, eta_min=1e-6)
     schedDY = CosineAnnealingLR(optDY, T_max=EPOCHS, eta_min=1e-6)
@@ -169,51 +169,57 @@ if __name__ == "__main__":
             y_onehot = F.one_hot(y, num_classes=NUM_CLASSES)            # [B,H,W,NUM_CLASSES]
             y_onehot = y_onehot.permute(0,3,1,2).float()               # [B,NUM_CLASSES,H,W]
 
-            # ----- D step -----
-            with torch.amp.autocast(device_str):
-                y_hat, p_hat, _ = G(f, m)  # y_hat: [B,NUM_CLASSES,H,W]
+            # ----- D step ----- (train D every 2 steps to balance with G)
+            if i % 2 == 0:
+                with torch.amp.autocast(device_str):
+                    y_hat_d, p_hat_d, _ = G(f, m)  # y_hat: [B,NUM_CLASSES,H,W]
 
-                # D1 full-res
-                real1, rf1 = D1(torch.cat([f, m, y_onehot], dim=1))
-                fake1, ff1 = D1(torch.cat([f, m, y_hat.detach()], dim=1))
-                loss_d1 = d_hinge(real1, fake1)
+                    # D1 full-res
+                    real1, rf1 = D1(torch.cat([f, m, y_onehot], dim=1))
+                    fake1, ff1 = D1(torch.cat([f, m, y_hat_d.detach()], dim=1))
+                    loss_d1 = d_hinge_smooth(real1, fake1, smooth=0.1)
 
-                # D2 half-res
-                f2  = F.interpolate(f, scale_factor=0.5, mode='bilinear', align_corners=False)
-                m2  = F.interpolate(m, scale_factor=0.5, mode='bilinear', align_corners=False)
-                y2  = F.interpolate(y_onehot, scale_factor=0.5, mode='bilinear', align_corners=False)
-                yh2 = F.interpolate(y_hat.detach(), scale_factor=0.5, mode='bilinear', align_corners=False)
-                real2, rf2 = D2(torch.cat([f2, m2, y2], dim=1))
-                fake2, ff2 = D2(torch.cat([f2, m2, yh2], dim=1))
-                loss_d2 = d_hinge(real2, fake2)
+                    # D2 half-res
+                    f2  = F.interpolate(f, scale_factor=0.5, mode='bilinear', align_corners=False)
+                    m2  = F.interpolate(m, scale_factor=0.5, mode='bilinear', align_corners=False)
+                    y2  = F.interpolate(y_onehot, scale_factor=0.5, mode='bilinear', align_corners=False)
+                    yh2 = F.interpolate(y_hat_d.detach(), scale_factor=0.5, mode='bilinear', align_corners=False)
+                    real2, rf2 = D2(torch.cat([f2, m2, y2], dim=1))
+                    fake2, ff2 = D2(torch.cat([f2, m2, yh2], dim=1))
+                    loss_d2 = d_hinge_smooth(real2, fake2, smooth=0.1)
 
-                # DY y-only
-                realY_logits, _ = DY(y_onehot)
-                fakeY_logits, _ = DY(y_hat.detach())
-                loss_dy = d_hinge(realY_logits, fakeY_logits) * LAMBDA_GAN_Y
+                    # DY y-only
+                    realY_logits, _ = DY(y_onehot)
+                    fakeY_logits, _ = DY(y_hat_d.detach())
+                    loss_dy = d_hinge_smooth(realY_logits, fakeY_logits, smooth=0.1) * LAMBDA_GAN_Y
 
-                loss_d = loss_d1 + loss_d2 + loss_dy
+                    loss_d = loss_d1 + loss_d2 + loss_dy
 
-            optD1.zero_grad(set_to_none=True)
-            optD2.zero_grad(set_to_none=True)
-            optDY.zero_grad(set_to_none=True)
-            scaler.scale(loss_d).backward()
+                optD1.zero_grad(set_to_none=True)
+                optD2.zero_grad(set_to_none=True)
+                optDY.zero_grad(set_to_none=True)
+                scaler.scale(loss_d).backward()
 
-            scaler.unscale_(optD1)
-            scaler.unscale_(optD2)
-            scaler.unscale_(optDY)
+                scaler.unscale_(optD1)
+                scaler.unscale_(optD2)
+                scaler.unscale_(optDY)
 
-            torch.nn.utils.clip_grad_norm_(D1.parameters(), max_norm=1.0)
-            torch.nn.utils.clip_grad_norm_(D2.parameters(), max_norm=1.0)
-            torch.nn.utils.clip_grad_norm_(DY.parameters(), max_norm=1.0)
+                torch.nn.utils.clip_grad_norm_(D1.parameters(), max_norm=1.0)
+                torch.nn.utils.clip_grad_norm_(D2.parameters(), max_norm=1.0)
+                torch.nn.utils.clip_grad_norm_(DY.parameters(), max_norm=1.0)
 
 
-            scaler.step(optD1)
-            scaler.step(optD2)
-            scaler.step(optDY)
+                scaler.step(optD1)
+                scaler.step(optD2)
+                scaler.step(optDY)
+            else:
+                # Don't train D this step
+                loss_d = torch.tensor(0.0, device=device)  # Dummy loss for logging
+                y_hat_d = None
 
             # ----- G step -----
             with torch.amp.autocast(device_str):
+                # Compute y_hat for generator (reuse from D step if available, but need fresh forward pass for gradients)
                 y_hat, p_hat, plogits = G(f, m)
 
                 # GAN losses
@@ -224,6 +230,15 @@ if __name__ == "__main__":
                     F.interpolate(y_hat, scale_factor=0.5, mode='bilinear', align_corners=False)
                 ], dim=1))
                 loss_g_gan = g_hinge(fake1) + g_hinge(fake2)
+
+                # Feature matching loss for stability
+                # Get real features for feature matching
+                _, rf1_real = D1(torch.cat([f, m, y_onehot], dim=1))
+                f2_real = F.interpolate(f, scale_factor=0.5, mode='bilinear', align_corners=False)
+                m2_real = F.interpolate(m, scale_factor=0.5, mode='bilinear', align_corners=False)
+                y2_real = F.interpolate(y_onehot, scale_factor=0.5, mode='bilinear', align_corners=False)
+                _, rf2_real = D2(torch.cat([f2_real, m2_real, y2_real], dim=1))
+                loss_g_feat = feature_matching_loss(rf1_real, ff1) + feature_matching_loss(rf2_real, ff2)
 
                 # Y-only GAN
                 fakeY_logits, _ = DY(y_hat)
@@ -238,9 +253,10 @@ if __name__ == "__main__":
                 loss_dice = dice_loss(y_hat, y_labels)
 
 
-                # Total G loss
+                # Total G loss (with feature matching)
                 loss_g = (LAMBDA_GAN * loss_g_gan) + loss_g_y + \
-                (LAMBDA_FOCAL * ce_loss) + (LAMBDA_DICE * loss_dice)
+                (LAMBDA_FOCAL * ce_loss) + (LAMBDA_DICE * loss_dice) + \
+                (0.1 * loss_g_feat)  # Feature matching weight
 
 
             optG.zero_grad(set_to_none=True)
@@ -261,7 +277,6 @@ if __name__ == "__main__":
             })
 
 
-        schedG.step()
         schedD1.step()
         schedD2.step()
         schedDY.step()
@@ -274,6 +289,9 @@ if __name__ == "__main__":
             dur = (time.time()-t0)/60
             #print(f"Epoch {epoch} done in {dur:.2f} min")
             print(f"[val] mIoU={metrics['mIoU']:.4f}")
+            
+            # Step generator scheduler based on mIoU (ReduceLROnPlateau)
+            schedG.step(metrics["mIoU"])
             
 
             # save samples using a validation batch
