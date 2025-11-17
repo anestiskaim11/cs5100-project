@@ -135,7 +135,7 @@ if __name__ == "__main__":
     optD2= Adam(D2.parameters(), lr=LR*0.001, weight_decay=1e-5, betas=(0.5, 0.999))
     optDY= Adam(DY.parameters(), lr=LR*0.001, weight_decay=1e-5, betas=(0.5, 0.999))
 
-    schedG  = ReduceLROnPlateau(optG, mode='max', factor=0.5, patience=5, min_lr=1e-6)
+    schedG  = ReduceLROnPlateau(optG, mode='max', factor=0.5, patience=5, verbose=True, min_lr=1e-6)
     schedD1 = CosineAnnealingLR(optD1, T_max=EPOCHS, eta_min=1e-6)
     schedD2 = CosineAnnealingLR(optD2, T_max=EPOCHS, eta_min=1e-6)
     schedDY = CosineAnnealingLR(optDY, T_max=EPOCHS, eta_min=1e-6)
@@ -170,30 +170,29 @@ if __name__ == "__main__":
             y_onehot = y_onehot.permute(0,3,1,2).float()               # [B,NUM_CLASSES,H,W]
 
             # ----- D step ----- (train D every 2 steps to balance with G)
-            if i % 2 == 0:
-                with torch.amp.autocast(device_str):
-                    y_hat_d, p_hat_d, _ = G(f, m)  # y_hat: [B,NUM_CLASSES,H,W]
+            with torch.amp.autocast(device_str):
+                y_hat_d, p_hat_d, _ = G(f, m)  # y_hat: [B,NUM_CLASSES,H,W]
 
                     # D1 full-res
-                    real1, rf1 = D1(torch.cat([f, m, y_onehot], dim=1))
-                    fake1, ff1 = D1(torch.cat([f, m, y_hat_d.detach()], dim=1))
-                    loss_d1 = d_hinge_smooth(real1, fake1, smooth=0.1)
+                real1, rf1 = D1(torch.cat([f, m, y_onehot], dim=1))
+                fake1, ff1 = D1(torch.cat([f, m, y_hat_d.detach()], dim=1))
+                loss_d1 = d_hinge_smooth(real1, fake1, smooth=0.1)
 
                     # D2 half-res
-                    f2  = F.interpolate(f, scale_factor=0.5, mode='bilinear', align_corners=False)
-                    m2  = F.interpolate(m, scale_factor=0.5, mode='bilinear', align_corners=False)
-                    y2  = F.interpolate(y_onehot, scale_factor=0.5, mode='bilinear', align_corners=False)
-                    yh2 = F.interpolate(y_hat_d.detach(), scale_factor=0.5, mode='bilinear', align_corners=False)
-                    real2, rf2 = D2(torch.cat([f2, m2, y2], dim=1))
-                    fake2, ff2 = D2(torch.cat([f2, m2, yh2], dim=1))
-                    loss_d2 = d_hinge_smooth(real2, fake2, smooth=0.1)
+                f2  = F.interpolate(f, scale_factor=0.5, mode='bilinear', align_corners=False)
+                m2  = F.interpolate(m, scale_factor=0.5, mode='bilinear', align_corners=False)
+                y2  = F.interpolate(y_onehot, scale_factor=0.5, mode='bilinear', align_corners=False)
+                yh2 = F.interpolate(y_hat_d.detach(), scale_factor=0.5, mode='bilinear', align_corners=False)
+                real2, rf2 = D2(torch.cat([f2, m2, y2], dim=1))
+                fake2, ff2 = D2(torch.cat([f2, m2, yh2], dim=1))
+                loss_d2 = d_hinge_smooth(real2, fake2, smooth=0.1)
 
-                    # DY y-only
-                    realY_logits, _ = DY(y_onehot)
-                    fakeY_logits, _ = DY(y_hat_d.detach())
-                    loss_dy = d_hinge_smooth(realY_logits, fakeY_logits, smooth=0.1) * LAMBDA_GAN_Y
+                # DY y-only
+                realY_logits, _ = DY(y_onehot)
+                fakeY_logits, _ = DY(y_hat_d.detach())
+                loss_dy = d_hinge_smooth(realY_logits, fakeY_logits, smooth=0.1) * LAMBDA_GAN_Y
 
-                    loss_d = loss_d1 + loss_d2 + loss_dy
+                loss_d = loss_d1 + loss_d2 + loss_dy
 
                 optD1.zero_grad(set_to_none=True)
                 optD2.zero_grad(set_to_none=True)
@@ -212,10 +211,7 @@ if __name__ == "__main__":
                 scaler.step(optD1)
                 scaler.step(optD2)
                 scaler.step(optDY)
-            else:
-                # Don't train D this step
-                loss_d = torch.tensor(0.0, device=device)  # Dummy loss for logging
-                y_hat_d = None
+            
 
             # ----- G step -----
             with torch.amp.autocast(device_str):
