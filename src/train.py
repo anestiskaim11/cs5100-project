@@ -135,7 +135,7 @@ if __name__ == "__main__":
     optD2= Adam(D2.parameters(), lr=LR*0.001, weight_decay=1e-5, betas=(0.5, 0.999))
     optDY= Adam(DY.parameters(), lr=LR*0.001, weight_decay=1e-5, betas=(0.5, 0.999))
 
-    schedG  = ReduceLROnPlateau(optG, mode='max', factor=0.5, patience=5, verbose=True, min_lr=1e-6)
+    schedG  = ReduceLROnPlateau(optG, mode='max', factor=0.5, patience=5, min_lr=1e-6)
     schedD1 = CosineAnnealingLR(optD1, T_max=EPOCHS, eta_min=1e-6)
     schedD2 = CosineAnnealingLR(optD2, T_max=EPOCHS, eta_min=1e-6)
     schedDY = CosineAnnealingLR(optDY, T_max=EPOCHS, eta_min=1e-6)
