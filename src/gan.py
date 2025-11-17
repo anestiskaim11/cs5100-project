@@ -37,7 +37,7 @@ class UpBlock(nn.Module):
 class GeneratorUNet(nn.Module):
     def __init__(self, in_ch=4, num_classes=NUM_CLASSES): 
         super().__init__()
-        self.backbone = safe_create_convnext(pretrained=True)
+        self.backbone = safe_create_convnext(pretrained=False)
         chs = self.backbone.feature_info.channels()
         self.stem = ConvBlock(in_ch, 64)
         self.enc1 = ConvBlock(64, 96)

@@ -131,9 +131,9 @@ if __name__ == "__main__":
     DY = PatchDiscriminator(in_ch=NUM_CLASSES).to(device)      # Y-only
 
     optG = Adam(G.parameters(),  lr=LR, weight_decay=1e-5, betas=(0.5, 0.999))
-    optD1= Adam(D1.parameters(), lr=LR*0.1, weight_decay=1e-5, betas=(0.5, 0.999))
-    optD2= Adam(D2.parameters(), lr=LR*0.1, weight_decay=1e-5, betas=(0.5, 0.999))
-    optDY= Adam(DY.parameters(), lr=LR*0.1, weight_decay=1e-5, betas=(0.5, 0.999))
+    optD1= Adam(D1.parameters(), lr=LR*0.01, weight_decay=1e-5, betas=(0.5, 0.999))
+    optD2= Adam(D2.parameters(), lr=LR*0.01, weight_decay=1e-5, betas=(0.5, 0.999))
+    optDY= Adam(DY.parameters(), lr=LR*0.01, weight_decay=1e-5, betas=(0.5, 0.999))
 
     schedG  = CosineAnnealingLR(optG,  T_max=EPOCHS, eta_min=1e-6)
     schedD1 = CosineAnnealingLR(optD1, T_max=EPOCHS, eta_min=1e-6)
