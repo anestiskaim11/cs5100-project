@@ -131,11 +131,11 @@ if __name__ == "__main__":
     DY = PatchDiscriminator(in_ch=NUM_CLASSES).to(device)      # Y-only
 
     optG = Adam(G.parameters(),  lr=LR, weight_decay=1e-5, betas=(0.5, 0.999))
-    optD1= Adam(D1.parameters(), lr=LR*0.001, weight_decay=1e-5, betas=(0.5, 0.999))
-    optD2= Adam(D2.parameters(), lr=LR*0.001, weight_decay=1e-5, betas=(0.5, 0.999))
-    optDY= Adam(DY.parameters(), lr=LR*0.001, weight_decay=1e-5, betas=(0.5, 0.999))
+    optD1= Adam(D1.parameters(), lr=LR*0.01, weight_decay=1e-5, betas=(0.5, 0.999))
+    optD2= Adam(D2.parameters(), lr=LR*0.01, weight_decay=1e-5, betas=(0.5, 0.999))
+    optDY= Adam(DY.parameters(), lr=LR*0.01, weight_decay=1e-5, betas=(0.5, 0.999))
 
-    schedG  = ReduceLROnPlateau(optG, mode='max', factor=0.5, patience=5, verbose=True, min_lr=1e-6)
+    schedG  = ReduceLROnPlateau(optG, mode='max', factor=0.5, patience=5, min_lr=1e-6)
     schedD1 = CosineAnnealingLR(optD1, T_max=EPOCHS, eta_min=1e-6)
     schedD2 = CosineAnnealingLR(optD2, T_max=EPOCHS, eta_min=1e-6)
     schedDY = CosineAnnealingLR(optDY, T_max=EPOCHS, eta_min=1e-6)
@@ -194,23 +194,24 @@ if __name__ == "__main__":
 
                 loss_d = loss_d1 + loss_d2 + loss_dy
 
-                optD1.zero_grad(set_to_none=True)
-                optD2.zero_grad(set_to_none=True)
-                optDY.zero_grad(set_to_none=True)
-                scaler.scale(loss_d).backward()
+                if (epoch + 1) % 5 == 0:
+                    optD1.zero_grad(set_to_none=True)
+                    optD2.zero_grad(set_to_none=True)
+                    optDY.zero_grad(set_to_none=True)
+                    scaler.scale(loss_d).backward()
 
-                scaler.unscale_(optD1)
-                scaler.unscale_(optD2)
-                scaler.unscale_(optDY)
+                    scaler.unscale_(optD1)
+                    scaler.unscale_(optD2)
+                    scaler.unscale_(optDY)
 
-                torch.nn.utils.clip_grad_norm_(D1.parameters(), max_norm=1.0)
-                torch.nn.utils.clip_grad_norm_(D2.parameters(), max_norm=1.0)
-                torch.nn.utils.clip_grad_norm_(DY.parameters(), max_norm=1.0)
+                    torch.nn.utils.clip_grad_norm_(D1.parameters(), max_norm=1.0)
+                    torch.nn.utils.clip_grad_norm_(D2.parameters(), max_norm=1.0)
+                    torch.nn.utils.clip_grad_norm_(DY.parameters(), max_norm=1.0)
 
 
-                scaler.step(optD1)
-                scaler.step(optD2)
-                scaler.step(optDY)
+                    scaler.step(optD1)
+                    scaler.step(optD2)
+                    scaler.step(optDY)
             
 
             # ----- G step -----
