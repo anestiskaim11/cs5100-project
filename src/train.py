@@ -7,6 +7,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, ReduceLROnPlateau
 from loss import EMA, masked_l1, d_hinge, d_hinge_smooth, g_hinge, dft_log_amp, soft_erode, dice_loss, cldice_loss, focal_loss
 import torchvision.utils as vutils
 from pytorch_msssim import ms_ssim
+from torchmetrics import JaccardIndex
 import numpy as np, os, time, cv2, random, torch
 from dataloader import get_cityscapes_dataloader
 from config import *
@@ -19,34 +20,13 @@ random.seed(SEED); np.random.seed(SEED); torch.manual_seed(SEED); torch.cuda.man
 def feature_matching_loss(real_feats, fake_feats):
     return sum(F.l1_loss(a,b) for a,b in zip(real_feats, fake_feats))
 
-def calculate_miou(preds, labels, num_classes):
-    """
-    Compute mean Intersection over Union (mIoU) for multi-class segmentation.
-    preds: [B,H,W] predicted class indices
-    labels: [B,H,W] ground truth class indices
-    """
-    preds = preds.cpu().numpy()
-    labels = labels.cpu().numpy()
-    ious = []
-
-    for cls in range(num_classes):
-        pred_inds = (preds == cls)
-        label_inds = (labels == cls)
-        intersection = np.logical_and(pred_inds, label_inds).sum()
-        union = np.logical_or(pred_inds, label_inds).sum()
-        if union == 0:
-            continue
-        ious.append(intersection / union)
-
-    if len(ious) == 0:
-        return 0.0
-    return np.mean(ious)
-
 
 @torch.no_grad()
 def evaluate(val_loader):
     G.eval(); ema.apply(G)
-    l1_list, miou_list = [], []
+    # Initialize torchmetrics JaccardIndex (mIoU) metric
+    miou_metric = JaccardIndex(task='multiclass', num_classes=NUM_CLASSES).to(device)
+    miou_metric.reset()
 
     for batch in val_loader:
         f = batch["image"].to(device)
@@ -57,17 +37,13 @@ def evaluate(val_loader):
         y_hat_cls = y_hat.argmax(dim=1)  # predicted class indices [B,H,W]
         if y.ndim == 4: y = y.squeeze(1)
 
-        # L1 loss
-        #y_onehot = F.one_hot(y, num_classes=NUM_CLASSES).permute(0,3,1,2).float()
-        #l1 = masked_l1(y_hat, y_onehot, m)
-        #l1_list.append(l1.item())
+        # Update metric with predictions and labels
+        miou_metric.update(y_hat_cls, y)
 
-        # mIoU
-        miou = calculate_miou(y_hat_cls, y, NUM_CLASSES)
-        miou_list.append(miou)
-
+    # Compute final mIoU
+    miou = miou_metric.compute().item()
     ema.restore(G); G.train()
-    return {"mIoU": float(np.mean(miou_list))}
+    return {"mIoU": float(miou)}
 
 def save_samples(batch, y_hat, p_hat, tag, max_n=4):
     f = batch["image"][:max_n].to(device)  # [B,3,H,W]
