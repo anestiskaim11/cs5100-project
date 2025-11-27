@@ -4,9 +4,8 @@ from torch.optim import Adam
 from tqdm import tqdm
 from gan import GeneratorUNet, PatchDiscriminator
 from torch.optim.lr_scheduler import CosineAnnealingLR, ReduceLROnPlateau
-from loss import EMA, masked_l1, d_hinge, d_hinge_smooth, g_hinge, dft_log_amp, soft_erode, dice_loss, cldice_loss, focal_loss
+from loss import EMA, d_hinge_smooth, g_hinge, dice_loss, feature_matching_loss
 import torchvision.utils as vutils
-from pytorch_msssim import ms_ssim
 from torchmetrics import JaccardIndex
 import numpy as np, os, time, cv2, random, torch
 from dataloader import get_cityscapes_dataloader
@@ -17,8 +16,6 @@ import csv
 
 random.seed(SEED); np.random.seed(SEED); torch.manual_seed(SEED); torch.cuda.manual_seed_all(SEED)
 
-def feature_matching_loss(real_feats, fake_feats):
-    return sum(F.l1_loss(a,b) for a,b in zip(real_feats, fake_feats))
 
 
 
@@ -265,8 +262,8 @@ if __name__ == "__main__":
 
                 # Total G loss (with feature matching)
                 loss_g = (LAMBDA_GAN * loss_g_gan) + loss_g_y + \
-                (LAMBDA_FOCAL * ce_loss) + (LAMBDA_DICE * loss_dice) + \
-                (0.1 * loss_g_feat)  # Feature matching weight
+                (LAMBDA_CE * ce_loss) + (LAMBDA_DICE * loss_dice) + \
+                (LAMBDA_FM * loss_g_feat)  # Feature matching weight
 
 
             optG.zero_grad(set_to_none=True)
