@@ -21,29 +21,57 @@ def feature_matching_loss(real_feats, fake_feats):
     return sum(F.l1_loss(a,b) for a,b in zip(real_feats, fake_feats))
 
 
-@torch.no_grad()
+
 def evaluate(val_loader):
-    G.eval(); ema.apply(G)
-    # Initialize torchmetrics JaccardIndex (mIoU) metric
+    G.eval()
+    ema.apply(G)
+
     miou_metric = JaccardIndex(task='multiclass', num_classes=NUM_CLASSES).to(device)
     miou_metric.reset()
 
-    for batch in val_loader:
-        f = batch["image"].to(device)
-        y = batch["label"].to(device)
-        m = batch["m"].to(device)
+    with torch.no_grad():
+        for batch in val_loader:
+            f = batch["image"].to(device)
+            y = batch["label"].to(device)   # keep original labels (may contain 255)
+            m = batch["m"].to(device)
 
-        y_hat, p_hat, _ = G(f, m)  # y_hat: [B, NUM_CLASSES, H, W]
-        y_hat_cls = y_hat.argmax(dim=1)  # predicted class indices [B,H,W]
-        if y.ndim == 4: y = y.squeeze(1)
+            # forward
+            y_hat, p_hat, _ = G(f, m)           # [B, NUM_CLASSES, H, W]
+            y_hat_cls = y_hat.argmax(dim=1)     # [B, H, W]
 
-        # Update metric with predictions and labels
-        miou_metric.update(y_hat_cls, y)
+            # squeeze channel dim if present
+            if y.ndim == 4:
+                y = y.squeeze(1)                # [B, H, W]
 
-    # Compute final mIoU
-    miou = miou_metric.compute().item()
-    ema.restore(G); G.train()
+            # Create mask of valid pixels: valid in [0, NUM_CLASSES-1] and not 255
+            valid_mask = (y != 255) & (y >= 0) & (y < NUM_CLASSES)  # boolean [B,H,W]
+
+            # If there are no valid pixels in this batch, skip update
+            if valid_mask.any():
+                # Flatten and apply mask
+                preds_flat = y_hat_cls[valid_mask]  # 1D tensor of predicted labels for valid pixels
+                targets_flat = y[valid_mask]        # 1D tensor of true labels for valid pixels
+
+                # Ensure dtype is correct
+                preds_flat = preds_flat.long()
+                targets_flat = targets_flat.long()
+
+                miou_metric.update(preds_flat, targets_flat)
+            else:
+                # optional: log skip
+                # print("Skipping batch: no valid pixels for mIoU")
+                continue
+
+    # compute final metric (handle case of zero updates)
+    try:
+        miou = miou_metric.compute().item()
+    except Exception:
+        miou = float("nan")
+
+    ema.restore(G)
+    G.train()
     return {"mIoU": float(miou)}
+
 
 def save_samples(batch, y_hat, p_hat, tag, max_n=4):
     f = batch["image"][:max_n].to(device)  # [B,3,H,W]
@@ -107,9 +135,9 @@ if __name__ == "__main__":
     DY = PatchDiscriminator(in_ch=NUM_CLASSES).to(device)      # Y-only
 
     optG = Adam(G.parameters(),  lr=LR, weight_decay=1e-5, betas=(0.5, 0.999))
-    optD1= Adam(D1.parameters(), lr=LR*0.01, weight_decay=1e-5, betas=(0.5, 0.999))
-    optD2= Adam(D2.parameters(), lr=LR*0.01, weight_decay=1e-5, betas=(0.5, 0.999))
-    optDY= Adam(DY.parameters(), lr=LR*0.01, weight_decay=1e-5, betas=(0.5, 0.999))
+    optD1= Adam(D1.parameters(), lr=LR*0.001, weight_decay=1e-5, betas=(0.5, 0.999))
+    optD2= Adam(D2.parameters(), lr=LR*0.001, weight_decay=1e-5, betas=(0.5, 0.999))
+    optDY= Adam(DY.parameters(), lr=LR*0.001, weight_decay=1e-5, betas=(0.5, 0.999))
 
     schedG  = ReduceLROnPlateau(optG, mode='max', factor=0.5, patience=5, min_lr=1e-6)
     schedD1 = CosineAnnealingLR(optD1, T_max=EPOCHS, eta_min=1e-6)
@@ -139,11 +167,20 @@ if __name__ == "__main__":
             y = batch["label"].to(device, non_blocking=True).long()    # [B,1,H,W] or [B,H,W]
             m = batch["m"].to(device, non_blocking=True).float()       # [B,1,H,W]
 
+            
             # ---- One-hot encode labels ----
             if y.ndim == 4:
                 y = y.squeeze(1)  # [B,H,W]
-            y_onehot = F.one_hot(y, num_classes=NUM_CLASSES)            # [B,H,W,NUM_CLASSES]
-            y_onehot = y_onehot.permute(0,3,1,2).float()               # [B,NUM_CLASSES,H,W]
+
+            # Map all invalid indices to the last valid class
+            y = torch.clamp(y, max=NUM_CLASSES - 1)   # ensures labels ∈ [0,18]
+
+            # Now safe to one-hot encode
+            y_onehot = F.one_hot(y, num_classes=NUM_CLASSES)   # [B,H,W,19]
+            y_onehot = y_onehot.permute(0, 3, 1, 2).float()    # [B,19,H,W]
+
+
+            
 
             # ----- D step ----- (train D every 2 steps to balance with G)
             with torch.amp.autocast(device_str):
@@ -170,24 +207,24 @@ if __name__ == "__main__":
 
                 loss_d = loss_d1 + loss_d2 + loss_dy
 
-                if (epoch + 1) % 5 == 0:
-                    optD1.zero_grad(set_to_none=True)
-                    optD2.zero_grad(set_to_none=True)
-                    optDY.zero_grad(set_to_none=True)
-                    scaler.scale(loss_d).backward()
+                
+                optD1.zero_grad(set_to_none=True)
+                optD2.zero_grad(set_to_none=True)
+                optDY.zero_grad(set_to_none=True)
+                scaler.scale(loss_d).backward()
 
-                    scaler.unscale_(optD1)
-                    scaler.unscale_(optD2)
-                    scaler.unscale_(optDY)
+                scaler.unscale_(optD1)
+                scaler.unscale_(optD2)
+                scaler.unscale_(optDY)
 
-                    torch.nn.utils.clip_grad_norm_(D1.parameters(), max_norm=1.0)
-                    torch.nn.utils.clip_grad_norm_(D2.parameters(), max_norm=1.0)
-                    torch.nn.utils.clip_grad_norm_(DY.parameters(), max_norm=1.0)
+                torch.nn.utils.clip_grad_norm_(D1.parameters(), max_norm=1.0)
+                torch.nn.utils.clip_grad_norm_(D2.parameters(), max_norm=1.0)
+                torch.nn.utils.clip_grad_norm_(DY.parameters(), max_norm=1.0)
 
 
-                    scaler.step(optD1)
-                    scaler.step(optD2)
-                    scaler.step(optDY)
+                scaler.step(optD1)
+                scaler.step(optD2)
+                scaler.step(optDY)
             
 
             # ----- G step -----
