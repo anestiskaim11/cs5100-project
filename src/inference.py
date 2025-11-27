@@ -29,13 +29,12 @@ def colorize(mask):
     color[valid] = CITYSCAPES_COLORS[mask[valid]]
     return color
 
-RUN_DIR = './run_best'
 
 # -------------------------------------------------------
 #                    INFERENCE LOOP
 # -------------------------------------------------------
 def run_inference():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
     # Load generator
     G = GeneratorUNet(in_ch=4, num_classes=NUM_CLASSES).to(device)
@@ -56,7 +55,7 @@ def run_inference():
     out_dir = f"{RUN_DIR}/inference"
     os.makedirs(out_dir, exist_ok=True)
 
-    _, test_loader = get_cityscapes_dataloader(mode="test")
+    _, test_loader = get_cityscapes_dataloader(mode="val")
 
     miou_metric = JaccardIndex(task="multiclass", num_classes=NUM_CLASSES).to(device)
     miou_metric.reset()
@@ -78,6 +77,7 @@ def run_inference():
 
             valid_mask = (y != 255) & (y >= 0) & (y < NUM_CLASSES)
 
+            
             if valid_mask.any():
                 preds_flat = y_pred[valid_mask].long()
                 targets_flat = y[valid_mask].long()
@@ -99,11 +99,12 @@ def run_inference():
                 cv2.imwrite(f"{out_dir}/sample_{idx:05d}_{b}.png",
                             cv2.cvtColor(combined, cv2.COLOR_RGB2BGR))
 
+            
+
     # compute IoU
-    try:
-        miou = miou_metric.compute().item()
-    except:
-        miou = float("nan")
+    
+    miou = miou_metric.compute().item()
+    
 
     print("\n==============================")
     print(f"  FINAL TEST mIoU = {miou:.4f}")
