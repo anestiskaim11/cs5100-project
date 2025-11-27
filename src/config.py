@@ -20,4 +20,4 @@ LAMBDA_GAN_Y= 0.5
 
 EPOCHS = 100
 VAL_EVERY = 1
-LR = 1e-5
+LR = 1e-4
