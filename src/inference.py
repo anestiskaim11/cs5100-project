@@ -60,24 +60,25 @@ def run_inference():
     miou_metric = JaccardIndex(task="multiclass", num_classes=NUM_CLASSES).to(device)
     miou_metric.reset()
 
+
     print("Running inference...")
     with torch.no_grad():
         for idx, batch in enumerate(tqdm(test_loader)):
+
             f = batch["image"].to(device)
             y = batch["label"].to(device)
             m = batch["m"].to(device)
+            paths = batch["path"]       # <-- list of file paths
 
             # Forward pass
-            y_hat, _, _ = G(f, m)           # [B, NUM_CLASSES, H, W]
-            y_pred = y_hat.argmax(1)        # [B,H,W]
+            y_hat, _, _ = G(f, m)
+            y_pred = y_hat.argmax(1)
 
-            # VALID PIXELS: remove 255
+            # VALID PIXELS
             if y.ndim == 4:
                 y = y.squeeze(1)
-
             valid_mask = (y != 255) & (y >= 0) & (y < NUM_CLASSES)
 
-            
             if valid_mask.any():
                 preds_flat = y_pred[valid_mask].long()
                 targets_flat = y[valid_mask].long()
@@ -87,6 +88,13 @@ def run_inference():
             # Save visual outputs
             # -------------------------------
             for b in range(f.shape[0]):
+
+                # Get original file name
+                orig_path = paths[b]
+                base_filename = os.path.basename(orig_path)      # e.g. "img1.png"
+                name_no_ext  = os.path.splitext(base_filename)[0]  # "img1"
+
+                # Prepare visualization
                 img = f[b].cpu().numpy().transpose(1,2,0)
                 img = (img - img.min()) / (img.max() - img.min() + 1e-6)
                 img = (img * 255).astype(np.uint8)
@@ -94,10 +102,13 @@ def run_inference():
                 pred_mask = y_pred[b].cpu().numpy().astype(np.uint8)
                 pred_color = colorize(pred_mask)
 
-                combined = np.concatenate([img, pred_color], axis=1)
+                #combined = np.concatenate([img, pred_color], axis=1)
+                combined = pred_color
+                # Save with the original filename
+                out_path = f"{out_dir}/{name_no_ext}_pred.png"
 
-                cv2.imwrite(f"{out_dir}/sample_{idx:05d}_{b}.png",
-                            cv2.cvtColor(combined, cv2.COLOR_RGB2BGR))
+                cv2.imwrite(out_path, cv2.cvtColor(combined, cv2.COLOR_RGB2BGR))
+
 
             
 

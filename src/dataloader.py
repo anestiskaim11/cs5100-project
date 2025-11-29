@@ -161,7 +161,8 @@ class CityscapesPairedDataset(Dataset):
             'id': key,
             'image': image,
             'label': label,
-            'm': fov_mask.float()
+            'm': fov_mask.float(),
+            'path': img_path
         }
 
 

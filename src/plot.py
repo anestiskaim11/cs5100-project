@@ -1,8 +1,9 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+from config import *
 
 # Load CSV file
-df = pd.read_csv("run\\report\\training_log.csv")
+df = pd.read_csv(f"{RUN_DIR}/report/training_log.csv")
 
 # Some rows may restart epoch indexing (0–25 repeating)
 # To visualize properly, we can add a global step index
@@ -39,4 +40,4 @@ ax2.legend(lines + lines2, labels + labels2, loc='upper right')
 
 # Tight layout and save
 plt.tight_layout()
-plt.show()
+plt.savefig(f"{RUN_DIR}/report/plot.png")
