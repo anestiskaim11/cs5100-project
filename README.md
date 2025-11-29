@@ -60,6 +60,15 @@ python -m src.inference
 
 Inference results will be saved in `run/inference/` directory.
 
+### Testing
+
+To run all tests:
+
+```bash
+python -m unittest discover
+```
+
+
 ## Project Structure
 
 ```
@@ -73,6 +82,11 @@ cs5100-project/
 │   ├── train.py           # Training script
 │   ├── inference.py       # Inference script
 │   └── plot.py            # Plotting utilities
+├── tests/                 # Unit tests
+│   ├── test_config.py
+│   ├── test_gan.py
+│   ├── test_loss.py
+│   └── test_dataloader.py
 ├── leftImg8bit/           # Cityscapes images (after extraction)
 ├── gtFine/                # Cityscapes labels (after extraction)
 ├── run/                   # Training outputs
