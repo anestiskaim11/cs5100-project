@@ -1,3 +1,8 @@
+import sys
+import os
+# Add project root to path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import torch
 import unittest
 import torch.nn as nn
@@ -104,23 +109,32 @@ class TestLoss(unittest.TestCase):
         # Store original parameters
         original_params = {k: v.clone() for k, v in model.state_dict().items()}
         
-        # Update EMA
+        # Update model parameters
         with torch.no_grad():
             for param in model.parameters():
                 param.add_(0.1)
+        
+        # Store modified parameters (before applying EMA)
+        modified_params = {k: v.clone() for k, v in model.state_dict().items()}
+        
+        # Update EMA
         ema.update(model)
         
-        # Apply EMA weights
+        # Apply EMA weights (this saves current model state to backup, then loads EMA shadow)
         ema.apply(model)
         applied_params = {k: v.clone() for k, v in model.state_dict().items()}
         
-        # Restore original weights
+        # Verify that applied params are different from modified params (EMA weights applied)
+        for key in modified_params:
+            self.assertFalse(torch.allclose(applied_params[key], modified_params[key]))
+        
+        # Restore original weights (should restore to state before applying EMA, i.e., modified_params)
         ema.restore(model)
         restored_params = {k: v.clone() for k, v in model.state_dict().items()}
         
-        # Check that original parameters were restored
-        for key in original_params:
-            self.assertTrue(torch.allclose(restored_params[key], original_params[key]))
+        # Check that restored parameters match the modified parameters (before EMA was applied)
+        for key in modified_params:
+            self.assertTrue(torch.allclose(restored_params[key], modified_params[key]))
 
 
 if __name__ == '__main__':

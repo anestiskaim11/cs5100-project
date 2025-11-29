@@ -1,8 +1,13 @@
+import sys
+import os
+# Add project root to path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import torch
 import unittest
 import numpy as np
 import tempfile
-import os
+import torchvision.transforms as transforms
 from PIL import Image
 from src.dataloader import (
     convert_34_to_19,
@@ -90,9 +95,24 @@ class TestDataloader(unittest.TestCase):
             }
         }
         
+        # Create transforms (required for the dataset to work)
+        img_transform = transforms.Compose([
+            transforms.Resize((IMG_SIZE, IMG_SIZE)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225]),
+        ])
+        
+        label_transform = transforms.Compose([
+            transforms.Resize((IMG_SIZE, IMG_SIZE), interpolation=Image.NEAREST),
+            transforms.PILToTensor()
+        ])
+        
         # Create dataset
         dataset = CityscapesPairedDataset(
             paired_images_dict=paired,
+            image_transform=img_transform,
+            label_transform=label_transform,
             augment=False
         )
         

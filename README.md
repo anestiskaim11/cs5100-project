@@ -36,13 +36,13 @@ This will create the `gtFine/` and `leftImg8bit/` directories in the project roo
 To train the model, run:
 
 ```bash
-python src/train.py
+python -m src.train
 ```
 
 You can also customize training parameters:
 
 ```bash
-python src/train.py --epochs 100 --lr 1e-4 --batch_size 8 --val_every 1
+python -m src.train --epochs 100 --lr 1e-4 --batch_size 8 --val_every 1
 ```
 
 Training outputs will be saved in the `run/` directory:
@@ -55,7 +55,7 @@ Training outputs will be saved in the `run/` directory:
 To run inference on the validation set:
 
 ```bash
-python src/inference.py
+python -m src.inference
 ```
 
 Inference results will be saved in `run/inference/` directory.

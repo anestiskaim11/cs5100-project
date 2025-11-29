@@ -1,6 +1,6 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-from config import *
+from .config import *
 
 # Load CSV file
 df = pd.read_csv(f"{RUN_DIR}/report/training_log.csv")

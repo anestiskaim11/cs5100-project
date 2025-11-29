@@ -1,5 +1,5 @@
 import torch, torch.nn as nn, torch.nn.functional as F, timm
-from config import NUM_CLASSES
+from .config import NUM_CLASSES
 
 def safe_create_convnext(pretrained=True):
     try:

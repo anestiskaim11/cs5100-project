@@ -6,9 +6,9 @@ from tqdm import tqdm
 from torchmetrics import JaccardIndex
 from torchvision.utils import save_image
 
-from gan import GeneratorUNet
-from dataloader import get_cityscapes_dataloader
-from config import *
+from .gan import GeneratorUNet
+from .dataloader import get_cityscapes_dataloader
+from .config import *
 
 # ---------------------------------------
 # Utility: color map for Cityscapes

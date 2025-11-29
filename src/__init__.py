@@ -6,8 +6,6 @@ from . import config
 from . import gan
 from . import dataloader
 from . import loss
-from . import train
-from . import inference
 from . import plot
 
 __all__ = [
@@ -15,8 +13,6 @@ __all__ = [
     'gan',
     'dataloader',
     'loss',
-    'train',
-    'inference',
     'plot',
 ]
 

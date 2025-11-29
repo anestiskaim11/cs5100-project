@@ -2,16 +2,16 @@ import torch, random, numpy as np
 import torch.nn.functional as F
 from torch.optim import Adam
 from tqdm import tqdm
-from gan import GeneratorUNet, PatchDiscriminator
+from .gan import GeneratorUNet, PatchDiscriminator
 from torch.optim.lr_scheduler import CosineAnnealingLR, ReduceLROnPlateau
-from loss import EMA, d_hinge_smooth, g_hinge, dice_loss, feature_matching_loss
+from .loss import EMA, d_hinge_smooth, g_hinge, dice_loss, feature_matching_loss
 import torchvision.utils as vutils
 from torchmetrics import JaccardIndex
 import numpy as np, os, time, cv2, random, torch
-from dataloader import get_cityscapes_dataloader
-from config import *
+from .dataloader import get_cityscapes_dataloader
+from .config import *
 import argparse
-import config
+from . import config
 import csv
 
 random.seed(SEED); np.random.seed(SEED); torch.manual_seed(SEED); torch.cuda.manual_seed_all(SEED)
