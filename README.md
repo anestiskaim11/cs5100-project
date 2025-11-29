@@ -12,26 +12,9 @@ Install the required Python packages:
 pip install -r requirements.txt
 ```
 
-### Step 2: Install gdown
+### Step 2: Extract Datasets
 
-Install `gdown` to download datasets from Google Drive:
-
-```bash
-pip install gdown
-```
-
-### Step 3: Download Datasets
-
-Download the Cityscapes dataset files:
-
-```bash
-gdown --id 1Ei7LWYR_LSzUUClNvUIEnZxfshaIA7fl --output leftImg8bit_trainvaltest.zip
-gdown --id 19yEobWCfu_bTHHnzdrMQE-MN4t045Y85 --output gtFine_trainvaltest.zip
-```
-
-### Step 4: Extract Datasets
-
-Extract the downloaded zip files:
+Obtain the Cityscapes dataset zip files (`gtFine_trainvaltest.zip` and `leftImg8bit_trainvaltest.zip`) and extract them in the project directory:
 
 ```bash
 unzip gtFine_trainvaltest.zip
@@ -43,6 +26,8 @@ unzip leftImg8bit_trainvaltest.zip
 Expand-Archive gtFine_trainvaltest.zip
 Expand-Archive leftImg8bit_trainvaltest.zip
 ```
+
+This will create the `gtFine/` and `leftImg8bit/` directories in the project root.
 
 ## Usage
 
