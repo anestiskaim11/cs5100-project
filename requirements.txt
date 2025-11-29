@@ -9,3 +9,4 @@ torch==2.8.0
 torchmetrics==1.8.1
 torchvision==0.23.0+cu126
 tqdm==4.67.1
+ultralytics==8.3.0
